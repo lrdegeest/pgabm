@@ -522,43 +522,58 @@ def plot(data, attributes, stat, gen=0, ymin=0, ymax=105, evolution=False, max_g
 ## utils for running a monte carlo on each institution
 # ==========================================================================
 
-def first_gen_scm(groupsize, scm, colname, niter):
-    thresholds, penalties = [], []
-    d = pd.DataFrame()
-    for i in range(niter):
-        t = random.sample(range(0, 101), groupsize)
-        p = random.sample(range(0, 101), groupsize)
-        choice_t, choice_p = scm(t), scm(p)
-        thresholds.append(choice_t)
-        penalties.append(choice_p)
-    d['threshold'] = thresholds
-    d['penalty'] = penalties
-    d['scm'] = colname
-    return (d)
+class MonteCarloSCM(object):
+    
+    def __init__(self, groupsize = 5, niter = 1000):
+        self.groupsize = groupsize
+        self.scms = [np.mean, truncated_mean, midrange_mean,  np.median, np.max, np.min, np.random.choice]
+        self.names = ["mean", "truncated", "midrange", "median", "max", "min", "random"]
+        self.niter = niter
+        self.sim_results = pd.DataFrame()
+    
+    @staticmethod
+    def midrange_mean(x):
+        # average of only the max and min values of a group's list
+        extremes = [np.min(x), np.max(x)]
+        trimmed_x = [i for i in x if i in extremes]
+        return np.mean(trimmed_x)
 
-
-def midrange_mean(x):
-    # average of only the max and min values of a group's list
-    extremes = [np.min(x), np.max(x)]
-    trimmed_x = [i for i in x if i in extremes]
-    return (np.mean(trimmed_x))
-
-
-def truncated_mean(x):
-    # average of everything but the max and min values
-    extremes = [np.min(x), np.max(x)]
-    trimmed_x = [i for i in x if i not in extremes]
-    return (np.mean(trimmed_x))
-
-
-def run_mc(groupsize=5, niter=10000):
-    scms = [np.mean, truncated_mean, midrange_mean, np.median, np.max, np.min, np.random.choice]
-    names = ["mean", "truncated", "midrange", "median", "max", "min", "random"]
-    pds = []
-    for i, j in zip(scms, names):
-        d = first_gen_scm(groupsize=5, scm=i, colname=j.upper(), niter=niter)
-        pds.append(d)
-    return (pd.concat(pds))
+    @staticmethod
+    def truncated_mean(x):
+        # average of everything but the max and min values
+        extremes = [np.min(x), np.max(x)]
+        trimmed_x = [i for i in x if i not in extremes]
+        return np.mean(trimmed_x)
+    
+    def run(self):
+        pds = []
+        for scm, j in zip(self.scms, self.names):
+            thresholds, penalties = [], []
+            d = pd.DataFrame()
+            for i in range(self.niter):
+                t = random.sample(range(0,101), self.groupsize)
+                p = random.sample(range(0,101), self.groupsize)
+                choice_t = scm(t)
+                thresholds.append(choice_t)
+                choice_p = scm(p)
+                penalties.append(choice_p)
+            d['threshold'] = thresholds
+            d['penalty'] = penalties
+            d['scm'] = j.upper()
+            pds.append(d)
+        pd_return = pd.concat(pds)
+        pd_return = pd_return.reset_index(drop=True)
+        self.sim_results = pd_return
+        pass
+    
+    def plot(self):
+        sns.displot(data = self.sim_results, x="threshold", y = 'penalty', col="scm", col_wrap = 3, kind="kde", fill=True)
+        plt.show()
+        pass
+    
+    def summary(self):
+        dfs = self.sim_results.groupby('scm').mean()
+        return dfs
 
 
 # ==========================================================================
